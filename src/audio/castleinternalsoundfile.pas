@@ -1,5 +1,5 @@
 {
-  Copyright 2003-2018 Michalis Kamburelis.
+  Copyright 2003-2019 Michalis Kamburelis.
 
   This file is part of "Castle Game Engine".
 
@@ -21,7 +21,7 @@ unit CastleInternalSoundFile;
 interface
 
 uses SysUtils, Classes,
-  CastleUtils, CastleTimeUtils, CastleSoundBase;
+  CastleUtils, CastleTimeUtils, CastleSoundBase, CastleInternalVorbisFile;
 
 type
   ESoundFileError = class(Exception);
@@ -90,9 +90,53 @@ type
     procedure ConvertTo16bit; virtual;
   end;
 
-  TSoundFileClass = class of TSoundFile;
+  TStreamedSoundFile = class
+  strict private
+  var
+    FURL: String;
+    public
+      { Load a sound from a stream.
 
-  { OggVorbis file loader.
+        @param(URL Is used to initialize URL property.
+          It is not used to load, the URL contents are assumed to be in Stream.)
+
+        @raises(ESoundFileError If loading of this sound file failed.
+          E.g. in case of decoding problems
+          (e.g. we do not have vorbisfile / tremolo to decompress OggVorbis,
+          or the OggVorbis stream is invalid.)
+        )
+
+        @raises(EStreamError If case reading from the underlying stream failed
+          (e.g. strean ended prematurely).
+
+          The class function CreateFromFile will catch and reraise them
+          as ESoundFileError.
+        )
+      }
+      constructor CreateFromStream(const Stream: TStream; const AURL: String); virtual;
+
+      { Load a sound data from a given URL.
+
+        @raises(ESoundFileError If loading of this sound file failed.
+          See @link(CreateFromStream) for various possible reasons.) }
+      class function CreateFromFile(const AURL: string): TStreamedSoundFile;
+
+      { URL from which we loaded this sound file. }
+      property URL: String read FURL;
+
+      function DataFormat: TSoundDataFormat; virtual; abstract;
+      function Frequency: LongWord; virtual; abstract;
+
+      { Returns readed size. }
+      function Read(var Buffer; const BufferSize: LongInt): LongInt; virtual; abstract;
+      { Rewind streamed sound file, this is necessary for looping. }
+      procedure Rewind;virtual;abstract;
+  end;
+
+  TSoundFileClass = class of TSoundFile;
+  TStreamedSoundFileClass = class of TStreamedSoundFile;
+
+  { OggVorbis file loader. Loads complete file to memory.
     Loads using libvorbisfile or tremolo. Both are open-source libraries
     for reading OggVorbis music from https://xiph.org/.
     Tremolo is used on mobile devices, libvorbisfile on desktop. }
@@ -107,6 +151,28 @@ type
 
     function Data: Pointer; override;
     function DataSize: LongWord; override;
+    function DataFormat: TSoundDataFormat; override;
+    function Frequency: LongWord; override;
+  end;
+
+    { OggVorbis file loader used when you streaming sounds.
+      Loads using libvorbisfile or tremolo. Both are open-source libraries
+      for reading OggVorbis music from https://xiph.org/.
+      Tremolo is used on mobile devices, libvorbisfile on desktop. }
+  TStreamedSoundOggVorbis = class(TStreamedSoundFile)
+  strict private
+    OggFile: TOggVorbis_File;
+  private
+    FDataFormat: TSoundDataFormat;
+    FFrequency: LongWord;
+    SourceFileStream: TStream;
+  public
+    constructor CreateFromStream(const Stream: TStream; const AURL: String); override;
+    destructor Destroy; override;
+
+    function Read(var Buffer; const BufferSize: LongInt): LongInt; override;
+    procedure Rewind; override;
+
     function DataFormat: TSoundDataFormat; override;
     function Frequency: LongWord; override;
   end;
@@ -134,8 +200,127 @@ var
 
 implementation
 
-uses CastleStringUtils, CastleInternalVorbisDecoder, CastleInternalVorbisFile,
+uses CastleStringUtils, CastleInternalVorbisDecoder,
   CastleLog, CastleDownload, CastleURIUtils;
+
+{ TStreamedSoundOggVorbis }
+
+constructor TStreamedSoundOggVorbis.CreateFromStream(const Stream: TStream; const AURL: String);
+begin
+  SourceFileStream := Stream;
+  OpenVorbisFile(OggFile, SourceFileStream, FDataFormat, FFrequency);
+end;
+
+destructor TStreamedSoundOggVorbis.Destroy;
+begin
+  CloseVorbisFile(OggFile);
+  FreeAndNil(SourceFileStream);
+
+  inherited Destroy;
+end;
+
+function TStreamedSoundOggVorbis.Read(var Buffer; const BufferSize: LongInt): LongInt;
+begin
+  Result := ReadVorbisFileFillBuffer(OggFile, Buffer, BufferSize);
+end;
+
+procedure TStreamedSoundOggVorbis.Rewind;
+begin
+  CloseVorbisFile(OggFile);
+  SourceFileStream.Position := 0;
+  OpenVorbisFile(OggFile, SourceFileStream, FDataFormat, FFrequency);
+end;
+
+function TStreamedSoundOggVorbis.DataFormat: TSoundDataFormat;
+begin
+  Result := FDataFormat;
+end;
+
+function TStreamedSoundOggVorbis.Frequency: LongWord;
+begin
+  Result := FFrequency;
+end;
+
+{ TStreamedSoundFile }
+
+constructor TStreamedSoundFile.CreateFromStream(const Stream: TStream;
+  const AURL: String);
+begin
+  inherited Create;
+  FURL := AURL;
+end;
+
+class function TStreamedSoundFile.CreateFromFile(const AURL: string): TStreamedSoundFile;
+var
+  C: TStreamedSoundFileClass;
+  S: TStream;
+  MimeType: string;
+  TimeStart: TCastleProfilerTime;
+begin
+  TimeStart := Profiler.Start('Loading "' + URIDisplay(AURL) + '" (TStreamedSoundFile)');
+  try
+    try
+      { soForceMemoryStream as current TSoundWAV and TSoundOggVorbis need seeking }
+      S := Download(AURL, [soForceMemoryStream], MimeType);
+        { calculate class to read based on MimeType }
+        if MimeType = 'audio/x-wav' then
+          raise ESoundFileError.Create('TODO: Reading WAV sound files not supported. Convert them to OggVorbis.')
+        else
+        if MimeType = 'audio/ogg' then
+          C := TStreamedSoundOggVorbis
+        else
+        if MimeType = 'audio/mpeg' then
+          raise ESoundFileError.Create('TODO: Reading MP3 sound files not supported. Convert them to OggVorbis.')
+        else
+        begin
+          WritelnWarning('Audio', Format('Not recognized MIME type "%s" for sound file "%s", trying to load it as ogg', [MimeType, AURL]));
+          C := TStreamedSoundOggVorbis
+        end;
+
+        Result := C.CreateFromStream(S, AURL);
+
+        if LogSoundLoading then
+        begin
+          WritelnLog('Sound', 'Loaded "%s": %s, %s, frequency: %d', [
+            URIDisplay(AURL),
+            Result.ClassName,
+            DataFormatToStr(Result.DataFormat),
+            Result.Frequency
+          ]);
+          { This is informative, but takes some time, so is commented out.
+          WritelnLog('Sound', '"%s" data analysis: %s', [
+            URIDisplay(AURL),
+            Result.DataStatistics
+          ]);
+          }
+        end;
+    except
+      { May be raised by Download in case opening the underlying stream failed. }
+      on E: EFOpenError do
+      begin
+        S.Free;
+        { Reraise as ESoundFileError, and add URL to exception message }
+        raise ESoundFileError.Create('Error while opening URL "' + URIDisplay(AURL) + '": ' + E.Message);
+      end;
+
+      { May be raised by C.CreateFromStream. }
+      on E: EStreamError do
+      begin
+        S.Free;
+        { Reraise as ESoundFileError, and add URL to exception message }
+        raise ESoundFileError.Create('Error while reading URL "' + URIDisplay(AURL) + '": ' + E.Message);
+      end;
+      on E: Exception do
+      begin
+        S.Free;
+        raise;
+      end;
+    end;
+
+  finally
+    Profiler.Stop(TimeStart)
+  end;
+end;
 
 { TSoundFile ----------------------------------------------------------------- }
 

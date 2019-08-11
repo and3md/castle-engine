@@ -64,6 +64,12 @@ type
     sfStereo16
   );
 
+  TSoundLoading = (
+    slComplete,
+    slStreaming
+  );
+
+
 function DataFormatToStr(const DataFormat: TSoundDataFormat): string;
 
 implementation

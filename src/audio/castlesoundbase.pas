@@ -24,6 +24,7 @@ uses SysUtils, Generics.Collections;
 
 type
   ENoMoreSources = class(Exception);
+  ESoundFileError = class(Exception);
 
   TSoundDistanceModel = (dmNone,
     dmInverseDistance , dmInverseDistanceClamped,
@@ -68,7 +69,6 @@ type
     slComplete,
     slStreaming
   );
-
 
 function DataFormatToStr(const DataFormat: TSoundDataFormat): string;
 

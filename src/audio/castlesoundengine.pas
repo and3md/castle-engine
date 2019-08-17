@@ -37,7 +37,7 @@ type
   ENoMoreOpenALSources = ENoMoreSources deprecated 'use ENoMoreSources';
   ESoundBufferNotLoaded = class(Exception);
   EInvalidSoundBufferFree = class(Exception);
-  ESoundFileError = CastleInternalSoundFile.ESoundFileError;
+  ESoundFileError = CastleSoundBase.ESoundFileError;
   EInvalidSoundRepositoryXml = class(Exception);
 
   TSound = class;
@@ -50,28 +50,21 @@ type
     and freed by @link(TSoundEngine.FreeBuffer).
     @bold(Do not create or free TSoundBuffer instances yourself.) }
   TSoundBuffer = class
-  strict private
-    FDataFormat: TSoundDataFormat;
-    FFrequency: LongWord;
   private
     FURL: string;
-    FDuration: TFloatTime;
     FSoundLoading: TSoundLoading;
     References: Cardinal;
     Backend: TSoundBufferBackend;
     BackendIsOpen: Boolean;
-
-    function GetDataFormat: TSoundDataFormat;
-    function GetFrequency: LongWord;
-
     procedure ContextOpen(const ExceptionOnError: boolean);
     procedure ContextClose;
   public
-    constructor Create(const SoundEngineBackend: TSoundEngineBackend; SoundLoading: TSoundLoading);
+    constructor Create(const SoundEngineBackend: TSoundEngineBackend;
+      const SoundLoading: TSoundLoading);
     destructor Destroy; override;
 
-    { Duration of the sound, in seconds. Zero if not loaded yet. }
-    property Duration: TFloatTime read FDuration;
+    { Duration of the sound, in seconds. -1 if not loaded yet. }
+    function Duration: TFloatTime;
 
     { Absolute sound file URL.
       Never empty (do not create TSoundBuffer instances for invalid / empty URL,
@@ -82,13 +75,13 @@ type
       Typical applications don't need this value, this is just an information
       about the loaded sound file.
       Undefined if backend is not loaded. }
-    property DataFormat: TSoundDataFormat read GetDataFormat;
+    function DataFormat: TSoundDataFormat;
 
     { Frequency (sample rate) of the loaded sound file.
       Typical applications don't need this value, this is just an information
       about the loaded sound file.
       Undefined if backend is not loaded. }
-    property Frequency: LongWord read GetFrequency;
+    function Frequency: LongWord;
   end;
 
   TSoundEvent = procedure (Sender: TSound) of object;
@@ -564,6 +557,18 @@ type
       is released only once you call @link(FreeBuffer) as many times as you called
       LoadBuffer for it.
 
+      Not specifying SoundLoading means to use slComplete,
+      which loads sound at once. It means that loading time is long,
+      but there's zero additional work at runtime, and caching buffers
+      works great.
+
+      Using SoundLoading = slStreaming means that we decompress
+      the sound (like OggVorbis) during playback.
+      It allows for much quicker sound loading (almost instant, if you use streaming
+      for everything) but means that sounds will be loaded (in parts)
+      during playback.
+      In general case, we advise to use it for longer sounds (like music tracks).
+
       @raises(ESoundFileError If loading of this sound file failed.
         There are many reasons why this may happen: we cannot read given URL,
         or it may contain invalid contents,
@@ -573,9 +578,6 @@ type
     function LoadBuffer(const URL: string; const SoundLoading: TSoundLoading; const ExceptionOnError: Boolean = true): TSoundBuffer; overload;
     function LoadBuffer(const URL: string; const ExceptionOnError: Boolean = true): TSoundBuffer; overload;
     function LoadBuffer(const URL: string; out Duration: TFloatTime): TSoundBuffer;
-      overload;
-      deprecated 'use LoadBuffer without Duration parameter, and just read TSoundBuffer.Duration after loading';
-    function LoadBuffer(const URL: string; const SoundLoading: TSoundLoading; out Duration: TFloatTime): TSoundBuffer;
       overload;
       deprecated 'use LoadBuffer without Duration parameter, and just read TSoundBuffer.Duration after loading';
     { @groupEnd }
@@ -1279,25 +1281,36 @@ var
 
 { TSoundBuffer --------------------------------------------------------------- }
 
-constructor TSoundBuffer.Create(const SoundEngineBackend: TSoundEngineBackend; SoundLoading: TSoundLoading);
+constructor TSoundBuffer.Create(const SoundEngineBackend: TSoundEngineBackend;
+  const SoundLoading: TSoundLoading);
 begin
   inherited Create;
   FSoundLoading := SoundLoading;
   Backend := SoundEngineBackend.CreateBuffer(SoundLoading);
 end;
 
-function TSoundBuffer.GetDataFormat: TSoundDataFormat;
+function TSoundBuffer.DataFormat: TSoundDataFormat;
 begin
   if BackendIsOpen then
-    FDataFormat := Backend.DataFormat;
-  Result := FDataFormat;
+    Result := Backend.DataFormat
+  else
+    Result := Default(TSoundDataFormat);
 end;
 
-function TSoundBuffer.GetFrequency: LongWord;
+function TSoundBuffer.Frequency: LongWord;
 begin
   if BackendIsOpen then
-    FFrequency := Backend.Frequency;
-  Result := FFrequency;
+    Result := Backend.Frequency
+  else
+    Result := 0;
+end;
+
+function TSoundBuffer.Duration: TFloatTime;
+begin
+  if BackendIsOpen then
+    Result := Backend.Duration
+  else
+    Result := -1;
 end;
 
 procedure TSoundBuffer.ContextOpen(const ExceptionOnError: boolean);
@@ -1306,7 +1319,6 @@ procedure TSoundBuffer.ContextOpen(const ExceptionOnError: boolean);
   begin
     FURL := URL;
     Backend.ContextOpen(URL);
-    FDuration := Backend.Duration;
     BackendIsOpen := true;
   end;
 
@@ -2128,9 +2140,9 @@ begin
   finally FreeAndNil(Parameters) end;
 end;
 
-function TSoundEngine.LoadBuffer(const URL: string; const SoundLoading: TSoundLoading; out Duration: TFloatTime): TSoundBuffer;
+function TSoundEngine.LoadBuffer(const URL: string; out Duration: TFloatTime): TSoundBuffer;
 begin
-  Result := LoadBuffer(URL, SoundLoading);
+  Result := LoadBuffer(URL);
   Duration := Result.Duration;
 end;
 
@@ -2167,12 +2179,7 @@ end;
 
 function TSoundEngine.LoadBuffer(const URL: string; const ExceptionOnError: Boolean): TSoundBuffer;
 begin
-  LoadBuffer(URL, slComplete, ExceptionOnError);
-end;
-
-function TSoundEngine.LoadBuffer(const URL: string; out Duration: TFloatTime): TSoundBuffer;
-begin
-  LoadBuffer(URL, slComplete, Duration);
+  Result := LoadBuffer(URL, slComplete, ExceptionOnError);
 end;
 
 procedure TSoundEngine.FreeBuffer(var Buffer: TSoundBuffer);
@@ -2578,8 +2585,7 @@ begin
   { set Buffer at the end, when URL is set }
   if URL <> '' then
   begin
-    Streaming := false;
-    Element.AttributeBoolean('stream', Streaming);
+    Streaming := Element.AttributeBooleanDef('stream', false);
     if Streaming then
       SoundLoading := slStreaming
     else

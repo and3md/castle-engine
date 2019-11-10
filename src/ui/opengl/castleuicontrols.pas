@@ -3275,8 +3275,13 @@ var
   I: Integer;
 begin
   if BackgroundEnable then
+  begin
+    FrameProfiler.Start(fmRenderBackground);
     RenderContext.Clear([cbColor], BackgroundColor);
+    FrameProfiler.Stop(fmRenderBackground);
+  end;
 
+  FrameProfiler.Start(fmRenderMain);
   { draw controls in "to" order, back to front }
   for I := 0 to Controls.Count - 1 do
     Controls[I].RecursiveRender(Rect);
@@ -3289,6 +3294,8 @@ begin
 
   RenderControlPrepare(Rect);
   if Assigned(OnRender) then OnRender(Self);
+
+  FrameProfiler.Stop(fmRenderMain);
 end;
 
 procedure TUIContainer.RenderControl(const Control: TCastleUserInterface;

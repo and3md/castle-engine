@@ -3513,7 +3513,18 @@ begin
     if GLVersion.BuggySwapNonStandardViewport then
       RenderContext.Viewport := Rect;
 
-    if DoubleBuffer then SwapBuffers else glFlush;
+    if DoubleBuffer then
+    begin
+      FrameProfiler.Start(fmRenderFlushOrSwapBuffers);
+      SwapBuffers;
+      FrameProfiler.Stop(fmRenderFlushOrSwapBuffers);
+    end
+    else
+    begin
+      FrameProfiler.Start(fmRenderFlushOrSwapBuffers);
+      glFlush;
+      FrameProfiler.Stop(fmRenderFlushOrSwapBuffers);
+    end;
     if AutoRedisplay then Invalidate;
   finally
     Fps._RenderEnd;

@@ -25,6 +25,9 @@ type
     fmRenderTransform,
     fmRenderScene,
     fmRenderShapesFilterBlending,
+    fmRenderFlushOrSwapBuffers,
+    fmRenderBackground,
+    fmRenderMain,
     //fmRenderFrameProfiler,
     fmUpdate,
     fmUpdateScene,
@@ -183,16 +186,20 @@ procedure TCastleFrameProfiler.StartFrame;
   begin
     TotalTime := FramesTimes[CurrentFrame, IndexTotalMetric];
     WritelnLogMultiline('FrameProfiler', Format(
-      'Frame time: %f secs (we should have %f FPS based on this):' + NL +
+      'Frame time: %.5f secs (we should have %f FPS based on this):' + NL +
       '- BeforeRender: %d%%' + NL +
-      '- Render: %d%% (%f secs, we should have %f "only render FPS" based on this)' + NL +
-      '  - TCastleTransform.Render transformation: %d%%' + NL +
-      '  - TCastleScene.Render: %d%%' + NL +
-      '    - ShapesFilterBlending: %d%%' + NL +
+      '- Render: %d%% (%.5f secs, we should have %f "only render FPS" based on this)' + NL +
+      '  - Main: %d%% (%.5f secs)' + NL +
+      '    - TCastleTransform.Render transformation: %d%% (%.5f secs)' + NL +
+      '    - TCastleScene.Render: %d%% (%.5f secs)' + NL +
+      '      - ShapesFilterBlending: %d%% (%.5f secs)' + NL +
+      '  - Flush/Swap Buffers: %d%% (%.5f secs)' + NL +
+      '  - Background: %d%% (%.5f secs)' + NL +
+
       // '  - RenderFrameProfiler: %d%%' + NL +
       '%s' +
-      '- Update: %d%%' + NL +
-      '  - TCastleSceneCore.Update: %d%%' + NL +
+      '- Update: %d%% (%.5f secs)' + NL +
+      '  - TCastleSceneCore.Update: %d%% (%.5f secs)' + NL +
       '  - Update Kraft Physics: %d%% (%.5f secs)' + NL +
       '%s' +
       '- Other:' + NL +
@@ -204,13 +211,24 @@ procedure TCastleFrameProfiler.StartFrame;
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRender)] / TotalTime),
       FramesTimes[CurrentFrame, IndexFrameMetric(fmRender)],
       1 / FramesTimes[CurrentFrame, IndexFrameMetric(fmRender)],
+      Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderMain)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderMain)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderTransform)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderTransform)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderScene)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderScene)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderShapesFilterBlending)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderShapesFilterBlending)],
+      Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFlushOrSwapBuffers)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFlushOrSwapBuffers)],
+      Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderBackground)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderBackground)],
       // Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFrameProfiler)] / TotalTime),
       DisplayUserMetrics(UserMetricsRenderNames, 1 + Ord(High(TFrameMetric)) + 1 + 0),
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdate)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdate)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdateScene)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdateScene)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdatePhysics)] / TotalTime),
       FramesTimes[CurrentFrame, IndexFrameMetric(fmUpdatePhysics)],
       DisplayUserMetrics(UserMetricsUpdateNames, 1 + Ord(High(TFrameMetric)) + 1 + MaxUserMetrics),

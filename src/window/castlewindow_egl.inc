@@ -97,6 +97,7 @@ var
   ShareContext: EGLContext;
   NumConfig: EGLint;
   Attribs: TLongIntList;
+  val: EGLint;
 const
   ContextAttribs: array [0..2] of EGLint =
   ( EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE);
@@ -137,6 +138,24 @@ begin
   Surface := eglCreateWindowSurface(Display, Config, WndPtr, nil);
   if Surface = EGL_NO_SURFACE then
     raise EGLContextNotPossible.Create('EGL: Cannot create surface: ' + EGLError);
+
+  eglQuerySurface(Display, Surface, EGL_SWAP_BEHAVIOR, @val);
+
+  if val = EGL_BUFFER_PRESERVED then
+    WritelnLog('EGL swap behavior: EGL_BUFFER_PRESERVED')
+  else
+    WritelnLog('EGL swap behavior: EGL_BUFFER_DESTROYED');
+
+  eglSurfaceAttrib(Display, Surface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_PRESERVED);
+  //eglSurfaceAttrib(Display, Surface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_DESTROYED);
+
+  eglQuerySurface(Display, Surface, EGL_SWAP_BEHAVIOR, @val);
+
+  if val = EGL_BUFFER_PRESERVED then
+    WritelnLog('EGL swap behavior: EGL_BUFFER_PRESERVED')
+  else
+    WritelnLog('EGL swap behavior: EGL_BUFFER_DESTROYED');
+
 end;
 
 procedure TCastleWindowBase.ContextDestroy;

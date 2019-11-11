@@ -2345,7 +2345,7 @@ procedure TCastleAbstractViewport.RenderFromViewEverything(const RenderingCamera
       be adjusted to something appropriate. }
     ClearColor := Black;
     ClearBuffers := [];
-
+    FrameProfiler.Start(fmRenderFragment);
     if ClearDepth then
       Include(ClearBuffers, cbDepth);
 
@@ -2379,6 +2379,7 @@ procedure TCastleAbstractViewport.RenderFromViewEverything(const RenderingCamera
       Include(ClearBuffers, cbStencil);
 
     RenderContext.Clear(ClearBuffers, ClearColor);
+    FrameProfiler.Stop(fmRenderFragment);
   end;
 
   procedure RenderBackground;

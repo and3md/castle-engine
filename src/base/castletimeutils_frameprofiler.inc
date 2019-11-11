@@ -28,6 +28,7 @@ type
     fmRenderFlushOrSwapBuffers,
     fmRenderBackground,
     fmRenderMain,
+    fmRenderFragment,
     //fmRenderFrameProfiler,
     fmUpdate,
     fmUpdateScene,
@@ -193,6 +194,7 @@ procedure TCastleFrameProfiler.StartFrame;
       '    - TCastleTransform.Render transformation: %d%% (%.5f secs)' + NL +
       '    - TCastleScene.Render: %d%% (%.5f secs)' + NL +
       '      - ShapesFilterBlending: %d%% (%.5f secs)' + NL +
+      '    - Fragment: %d%% (%.5f secs)' + NL +
       '  - Flush/Swap Buffers: %d%% (%.5f secs)' + NL +
       '  - Background: %d%% (%.5f secs)' + NL +
 
@@ -219,6 +221,8 @@ procedure TCastleFrameProfiler.StartFrame;
       FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderScene)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderShapesFilterBlending)] / TotalTime),
       FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderShapesFilterBlending)],
+      Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFragment)] / TotalTime),
+      FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFragment)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFlushOrSwapBuffers)] / TotalTime),
       FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderFlushOrSwapBuffers)],
       Round(100 * FramesTimes[CurrentFrame, IndexFrameMetric(fmRenderBackground)] / TotalTime),

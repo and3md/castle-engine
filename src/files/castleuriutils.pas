@@ -1120,7 +1120,7 @@ end;
 
 function ExtractURIPath(const URL: string): string;
 begin
-  Result := ExtractFilePath(URL);
+  Result:= ExtractFilePath(URIDeleteAnchor(URL, true));
 end;
 
 function URIIncludeSlash(const URL: String): String;
